@@ -1,5 +1,5 @@
 // Set DEBUG environment variable BEFORE importing any modules
-process.env.DEBUG = 'agenda:*';
+// process.env.DEBUG = 'agenda:*';
 
 import mongoose, { Connection } from 'mongoose';
 import { Agenda } from '.';
@@ -47,63 +47,6 @@ async function testAgendaWithExistingConnection() {
 			return;
 		}
 
-    // Add new record with createdAt now in attempts table
-    const attemptsCollection = db.collection('attempts');
-    await attemptsCollection.insertOne({
-      createdAt: new Date()
-    });
-    console.log('✅ Database connection established');
-
-    // Now clean the people collection
-    const peopleCollection = db.collection('people');
-    await peopleCollection.deleteMany({});
-    console.log('✅ Cleaned people collection');
-    // Now add a person
-    await peopleCollection.insertOne({
-      name: 'John Doe',
-      age: 30,
-      createdAt: new Date()
-    });
-    console.log('✅ Added a person to the people collection');
-    // Now try the findOneAndUpdate operation
-    const person = await peopleCollection.findOneAndUpdate(
-      { name: 'John Doe' },
-      { $set: { name: 'Jane Doe', age: 31 } },
-      { returnDocument: 'after' }
-    );
-    console.log('✅ Updated person:', person);
-    // Just end the process
-    return;
-
-
-		function logConnectionEvent() {
-			client.on('commandStarted', (event) => eventCommandCallback('commandStarted', event));
-			// cachedClient.on("commandSucceeded", eventCommandCallback);
-			client.on('commandFailed', (event) => eventCommandCallback('commandFailed', event));
-			client.on('connectionPoolCreated', (event) => eventConnectionCallback('connectionPoolCreated', event));
-			client.on('connectionPoolReady', (event) => eventConnectionCallback('connectionPoolReady', event));
-			client.on('connectionPoolClosed', (event) => eventConnectionCallback('connectionPoolClosed', event));
-			client.on('connectionCreated', (event) => eventConnectionCallback('connectionCreated', event));
-			client.on('connectionReady', (event) => eventConnectionCallback('connectionReady', event));
-			client.on('connectionClosed', (event) => eventConnectionCallback('connectionClosed', event));
-			client.on('connectionCheckOutStarted', (event) => eventConnectionCallback('connectionCheckOutStarted', event));
-			client.on('connectionCheckOutFailed', (event) => eventConnectionCallback('connectionCheckOutFailed', event));
-			client.on('connectionCheckedOut', (event) => eventConnectionCallback('connectionCheckedOut', event));
-			client.on('connectionCheckedIn', (event) => eventConnectionCallback('connectionCheckedIn', event));
-			client.on('connectionPoolCleared', (event) => eventConnectionCallback('connectionPoolCleared', event));
-
-			function eventCommandCallback(name, event) {
-        console.log(`🐞 Mongo command received. Type: ${name}: ${JSON.stringify(event)}`);
-			}
-			function eventConnectionCallback(name, event) {
-				console.log(
-					`🐞 Mongo connection event received. Type: ${name}: ${JSON.stringify(event)}`
-				);
-			}
-		}
-    // logConnectionEvent();
-
-    
 		try {
 			await db.dropCollection('agendaJobs');
 			console.log('🗑️ Dropped existing agendaJobs collection');
