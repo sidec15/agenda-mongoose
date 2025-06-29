@@ -1,12 +1,15 @@
 // Set DEBUG environment variable BEFORE importing any modules
 process.env.DEBUG = 'agenda:*';
 
-import mongoose from 'mongoose';
+import mongoose, { Connection } from 'mongoose';
 import { Agenda } from '.';
 import { MongoClient } from 'mongodb';
 
 const REUSE_MONGO_CONNECTION = process.env.REUSE_MONGO_CONNECTION === 'true';
 const USE_MONGOOSE = process.env.USE_MONGOOSE === 'true';
+const MAX_ATTEMPTS = process.env.MAX_ATTEMPTS
+  ? parseInt(process.env.MAX_ATTEMPTS, 10)
+  : 50;
 
 interface TestData {
 	message: string;
@@ -16,19 +19,20 @@ interface TestData {
 let testResult = 'not executed';
 
 async function testAgendaWithExistingConnection() {
-	console.log(`🧪 Testing Agenda with REUSE_MONGO_CONNECTION=${REUSE_MONGO_CONNECTION}`);
+	console.log(`🧪 Testing Agenda with REUSE_MONGO_CONNECTION=${REUSE_MONGO_CONNECTION} USE_MONGOOSE=${USE_MONGOOSE}`);
 
 	try {
 		let db: any = null;
 		const mongoUrl = 'mongodb://localhost:27017/agenda-test';
 
+    let client: MongoClient;
 		if (USE_MONGOOSE) {
 			// Connect with Mongoose first
 			await mongoose.connect('mongodb://localhost:27017/agenda-test');
 			console.log('✅ Mongoose connected');
 
-			// Clean up any existing jobs
 			db = mongoose.connection.db;
+      client = db.client as MongoClient;
 		} else {
 			// connect with mongo driver
 			const mongoClient = await MongoClient.connect(mongoUrl, {
@@ -36,12 +40,70 @@ async function testAgendaWithExistingConnection() {
 				// useUnifiedTopology: true
 			});
 			db = mongoClient.db();
+      client = mongoClient;
 		}
-
 		if (!db) {
 			console.error('❌ Failed to get database connection from Mongoose');
 			return;
 		}
+
+    // Add new record with createdAt now in attempts table
+    const attemptsCollection = db.collection('attempts');
+    await attemptsCollection.insertOne({
+      createdAt: new Date()
+    });
+    console.log('✅ Database connection established');
+
+    // Now clean the people collection
+    const peopleCollection = db.collection('people');
+    await peopleCollection.deleteMany({});
+    console.log('✅ Cleaned people collection');
+    // Now add a person
+    await peopleCollection.insertOne({
+      name: 'John Doe',
+      age: 30,
+      createdAt: new Date()
+    });
+    console.log('✅ Added a person to the people collection');
+    // Now try the findOneAndUpdate operation
+    const person = await peopleCollection.findOneAndUpdate(
+      { name: 'John Doe' },
+      { $set: { name: 'Jane Doe', age: 31 } },
+      { returnDocument: 'after' }
+    );
+    console.log('✅ Updated person:', person);
+    // Just end the process
+    return;
+
+
+		function logConnectionEvent() {
+			client.on('commandStarted', (event) => eventCommandCallback('commandStarted', event));
+			// cachedClient.on("commandSucceeded", eventCommandCallback);
+			client.on('commandFailed', (event) => eventCommandCallback('commandFailed', event));
+			client.on('connectionPoolCreated', (event) => eventConnectionCallback('connectionPoolCreated', event));
+			client.on('connectionPoolReady', (event) => eventConnectionCallback('connectionPoolReady', event));
+			client.on('connectionPoolClosed', (event) => eventConnectionCallback('connectionPoolClosed', event));
+			client.on('connectionCreated', (event) => eventConnectionCallback('connectionCreated', event));
+			client.on('connectionReady', (event) => eventConnectionCallback('connectionReady', event));
+			client.on('connectionClosed', (event) => eventConnectionCallback('connectionClosed', event));
+			client.on('connectionCheckOutStarted', (event) => eventConnectionCallback('connectionCheckOutStarted', event));
+			client.on('connectionCheckOutFailed', (event) => eventConnectionCallback('connectionCheckOutFailed', event));
+			client.on('connectionCheckedOut', (event) => eventConnectionCallback('connectionCheckedOut', event));
+			client.on('connectionCheckedIn', (event) => eventConnectionCallback('connectionCheckedIn', event));
+			client.on('connectionPoolCleared', (event) => eventConnectionCallback('connectionPoolCleared', event));
+
+			function eventCommandCallback(name, event) {
+        console.log(`🐞 Mongo command received. Type: ${name}: ${JSON.stringify(event)}`);
+			}
+			function eventConnectionCallback(name, event) {
+				console.log(
+					`🐞 Mongo connection event received. Type: ${name}: ${JSON.stringify(event)}`
+				);
+			}
+		}
+    // logConnectionEvent();
+
+    
 		try {
 			await db.dropCollection('agendaJobs');
 			console.log('🗑️ Dropped existing agendaJobs collection');
@@ -63,10 +125,10 @@ async function testAgendaWithExistingConnection() {
 		} else {
 			console.log('🆕 Creating Agenda with new connection');
 			agenda = new Agenda({
-				db: { address: 'mongodb://localhost:27017/agenda-test' },
-				processEvery: '1 second',
-				maxConcurrency: 1,
-				defaultConcurrency: 1
+				db: { address: mongoUrl },
+				processEvery: '5 seconds',
+				// maxConcurrency: 1,
+				// defaultConcurrency: 1
 			});
 		}
 
@@ -94,10 +156,10 @@ async function testAgendaWithExistingConnection() {
 		// Wait for job to execute
 		console.log('⏳ Waiting for job execution...');
 		let attempts = 0;
-		while (testResult === 'not executed' && attempts < 10) {
+		while (testResult === 'not executed' && attempts < MAX_ATTEMPTS) {
 			await new Promise(resolve => setTimeout(resolve, 1000));
 			attempts++;
-			console.log(`⏳ Waiting... attempt ${attempts}/10`);
+			console.log(`⏳ Waiting... attempt ${attempts}/${MAX_ATTEMPTS}`);
 		}
 
 		// Check result
@@ -134,4 +196,7 @@ async function testAgendaWithExistingConnection() {
 }
 
 // Run the test
-testAgendaWithExistingConnection();
+testAgendaWithExistingConnection()
+.then(() => console.log('🧪 Test completed'))
+.catch(error => console.error('❌ Test failed:', error))
+;

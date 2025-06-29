@@ -26,7 +26,8 @@
     "mocha-debug-internal": "DEBUG=agenda:internal:** mocha --reporter spec -b",
     "mocha-debug-all": "DEBUG=agenda:** mocha --reporter spec -b",
     "docs": "typedoc --out docs/agenda/6.x src/index.ts",
-    "dev": "ts-node --files src/main2.ts"
+    "dev": "ts-node --files src/main2.ts",
+    "test:findOneAndUpdate": "ts-node --files src/test-findOneAndUpdate.ts"
   },
   "config": {
     "blanket": {

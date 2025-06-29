@@ -155,12 +155,40 @@ export class JobDbRepository {
 		 */
 		const JOB_RETURN_QUERY: FindOneAndUpdateOptions = {
 			returnDocument: 'after',
-			sort: this.connectOptions.sort
+      // debug_sdc
+			// sort: this.connectOptions.sort
 		};
 
-		// Find ONE and ONLY ONE job and set the 'lockedAt' time so that job begins to be processed
+    const maxAttempts = process.env.MAX_ATTEMPTS
+      ? parseInt(process.env.MAX_ATTEMPTS, 10)
+      : 10;
+    let a = 0;
+    const waitMs = 1000;
+    let jobFound = false;
+    // Wait until there's at least one job in the collection
+    while (!jobFound && a < maxAttempts) {
+      const count = await this.collection.countDocuments();
+      if (count > 0) {
+        jobFound = true; // Set flag to true if job is found
+        log(`✅ Found ${count} jobs, proceeding with processing...`);
+      } else {
+        // Wait for a while before checking again
+        log(`⏳ No jobs found, waiting for ${waitMs}ms before retrying...`);
+        await new Promise(resolve => setTimeout(resolve, waitMs));
+      }
+      a++;
+    }
+
+    if (!jobFound) {
+      log('No jobs found after maximum attempts, returning undefined');
+      return undefined; // No jobs found after max attempts
+    }
+
+
+		// Find ONE and ONLY ONE job and set the 'lockedAt' ti-+-me so that job begins to be processed
+    const whereQuery = {};
 		const result = await this.collection.findOneAndUpdate(
-			JOB_PROCESS_WHERE_QUERY,
+			whereQuery,
 			JOB_PROCESS_SET_QUERY,
 			JOB_RETURN_QUERY
 		);
